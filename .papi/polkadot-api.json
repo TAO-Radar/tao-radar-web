@@ -1,0 +1,30 @@
+{
+  "version": 0,
+  "descriptorPath": ".papi/descriptors",
+  "entries": {
+    "paseo": {
+      "chain": "paseo",
+      "metadata": ".papi/metadata/paseo.scale",
+      "genesis": "0x77afd6190f1554ad45fd0d31aee62aacc33c6db0ea801129acb813f913e0764f",
+      "codeHash": "0x6581dc4ebeebf51f7c5a7914823712a53b77a4d9f84704da91307dd11a45aae1"
+    },
+    "paseo_asset_hub": {
+      "chain": "paseo_asset_hub",
+      "metadata": ".papi/metadata/paseo_asset_hub.scale",
+      "genesis": "0xd6eec26135305a8ad257a20d003357284c8aa03d0bdb2b357ab0a22371e11ef2",
+      "codeHash": "0x3b36085f46d6213d6f5a2fb26415d7c46da8e397977f2f7404ac431931ab5ae6"
+    },
+    "polkadot": {
+      "chain": "polkadot",
+      "metadata": ".papi/metadata/polkadot.scale",
+      "genesis": "0x91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3",
+      "codeHash": "0xe29a1246273f74b2fbfde9ede985ccbe86b844be0a3537e34eb2bcd68c3b3358"
+    },
+    "polkadot_asset_hub": {
+      "chain": "polkadot_asset_hub",
+      "metadata": ".papi/metadata/polkadot_asset_hub.scale",
+      "genesis": "0x68d56f15f85d3136970ec16946040bc1752654e906147f7e43e9d539d7c3de2f",
+      "codeHash": "0x04fa38c2fb117fbd73302c23b339ef18c4f3a200a0b487803208bf279161f1d7"
+    }
+  }
+}
