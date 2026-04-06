@@ -1,248 +1,343 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import "./App.css";
+import { PortfolioSettingsPage } from "./PortfolioSettingsPage";
 
-const RAO_TO_TAO = 1e-9;
-const DEFAULT_NETWORK = "finney";
-const TAO_STATS_ACCOUNT_URL = "https://api.taostats.io/api/account/latest/v1";
+type AppPage = "home" | "portfolio-settings";
+const SCRIPTABLE_WEB_MAIN_URL =
+  "https://gitlab.com/tao-radar/scriptable-widgets/-/raw/main/scriptable/widgets/main/web-main.js?ref_type=heads";
+const TAO_STATS_KEY_VALIDATE_URL = "https://management-api.taostats.io/api/v1/key/validate";
 
-type TaoStatsAccount = {
-  address?: { ss58?: string };
-  balance_total?: string;
-  balance_total_24hr_ago?: string;
+type AuthState = "idle" | "validating" | "authorized" | "invalid";
+
+function applyLoaderParams(template: string, apiKey: string, apiProvider: string): string {
+  return template.split("%(API_KEY)s").join(apiKey).split("%(API_PROVIDER)s").join(apiProvider);
+}
+
+function triggerFileDownload(filename: string, content: string): void {
+  const blob = new Blob([content], { type: "application/javascript;charset=utf-8" });
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
+function getPageFromHash(hash: string): AppPage {
+  return hash === "#/portfolio-settings" ? "portfolio-settings" : "home";
+}
+
+function goToPage(page: AppPage): void {
+  window.location.hash = page === "portfolio-settings" ? "/portfolio-settings" : "/";
+}
+
+type HomePageProps = {
+  apiKey: string;
+  apiProvider: string;
+  authState: AuthState;
+  onAuthorizeSubmit: (nextApiKey: string, nextApiProvider: string) => Promise<void>;
 };
 
-type AddressRow = {
-  address: string;
-  totalTao: number | null;
-  total24hAgoTao: number | null;
-  pnl24hTao: number | null;
-  error?: string;
-};
+function HomePage({ apiKey, apiProvider, authState, onAuthorizeSubmit }: HomePageProps) {
+  const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [isApiModalOpen, setIsApiModalOpen] = useState(false);
+  const [modalApiKey, setModalApiKey] = useState(apiKey);
+  const [modalApiProvider, setModalApiProvider] = useState(apiProvider || "TaoStats");
+  const [authError, setAuthError] = useState<string | null>(null);
 
-function parseAddresses(raw: string): string[] {
-  return Array.from(
-    new Set(
-      raw
-        .split(/[\n, ]+/)
-        .map((v) => v.trim())
-        .filter(Boolean),
-    ),
-  );
-}
+  const authButtonLabel =
+    authState === "validating"
+      ? "Authorizing..."
+      : authState === "authorized"
+        ? `Authorized (${apiProvider || "TaoStats"})`
+        : "Authorize";
+  const canDownloadLoader = authState === "authorized" && !!apiKey.trim();
 
-function toNumber(v: unknown): number {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : Number.NaN;
-}
-
-function shortAddress(addr: string): string {
-  if (addr.length <= 14) return addr;
-  return `${addr.slice(0, 6)}...${addr.slice(-6)}`;
-}
-
-function formatTao(v: number | null): string {
-  if (v === null || Number.isNaN(v)) return "-";
-  return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function formatSignedTao(v: number | null): string {
-  if (v === null || Number.isNaN(v)) return "-";
-  const n = v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return v > 0 ? `+${n}` : n;
-}
-
-async function fetchAccount(address: string, network: string, authHeader: string): Promise<TaoStatsAccount> {
-  const url =
-    `${TAO_STATS_ACCOUNT_URL}?address=${encodeURIComponent(address)}` +
-    `&network=${encodeURIComponent(network)}&page=1&limit=50`;
-
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: authHeader,
-      accept: "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
-
-  const json = (await response.json()) as { data?: TaoStatsAccount[] };
-  if (!json || !Array.isArray(json.data) || json.data.length === 0) {
-    throw new Error("No account data");
-  }
-  return json.data[0];
-}
-
-function App() {
-  const [apiKey, setApiKey] = useState("");
-  const [network, setNetwork] = useState(DEFAULT_NETWORK);
-  const [addressesText, setAddressesText] = useState(
-    "5FqdCPXAM6u9N8fdqRA2RWyQsJeBG63UoQEga4vVAKAAyA4v",
-  );
-  const [rows, setRows] = useState<AddressRow[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const addresses = useMemo(() => parseAddresses(addressesText), [addressesText]);
-
-  const onLookup = async () => {
-    setError(null);
-    setRows([]);
+  const onDownloadLoader = async () => {
+    setDownloadError(null);
+    setDownloadStatus(null);
 
     if (!apiKey.trim()) {
-      setError("Please provide TaoStats Authorization API key.");
-      return;
-    }
-    if (addresses.length === 0) {
-      setError("Please provide at least one address.");
+      setDownloadError("API key is required to download the Scriptable loader.");
       return;
     }
 
-    setLoading(true);
     try {
-      const nextRows = await Promise.all(
-        addresses.map(async (address): Promise<AddressRow> => {
-          try {
-            const account = await fetchAccount(address, network, apiKey.trim());
-            const balanceTotal = toNumber(account.balance_total);
-            const balanceTotal24hAgo = toNumber(account.balance_total_24hr_ago);
+      setDownloadStatus("Preparing loader...");
+      const response = await fetch(SCRIPTABLE_WEB_MAIN_URL, { method: "GET" });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch loader template (HTTP ${response.status})`);
+      }
 
-            if (!Number.isFinite(balanceTotal) || !Number.isFinite(balanceTotal24hAgo)) {
-              return {
-                address,
-                totalTao: null,
-                total24hAgoTao: null,
-                pnl24hTao: null,
-                error: "Invalid balance values in response",
-              };
-            }
+      const template = await response.text();
+      const customized = applyLoaderParams(template, apiKey.trim(), apiProvider.trim() || "TaoStats");
+      const outputName = "taoradar-web-main.js";
+      triggerFileDownload(outputName, customized);
+      setDownloadStatus(`Downloaded ${outputName}`);
+    } catch (e) {
+      setDownloadStatus(null);
+      setDownloadError(e instanceof Error ? e.message : "Failed to download loader.");
+    }
+  };
 
-            // TaoStats values are in RAO, so multiply by 10^-9 to display TAO.
-            const totalTao = balanceTotal * RAO_TO_TAO;
-            const total24hAgoTao = balanceTotal24hAgo * RAO_TO_TAO;
-            const pnl24hTao = (balanceTotal - balanceTotal24hAgo) * RAO_TO_TAO;
+  const onOpenApiModal = () => {
+    setModalApiKey(apiKey);
+    setModalApiProvider(apiProvider || "TaoStats");
+    setAuthError(null);
+    setIsApiModalOpen(true);
+  };
 
-            return { address, totalTao, total24hAgoTao, pnl24hTao };
-          } catch (e) {
-            return {
-              address,
-              totalTao: null,
-              total24hAgoTao: null,
-              pnl24hTao: null,
-              error: e instanceof Error ? e.message : "Unknown error",
-            };
-          }
-        }),
-      );
-
-      setRows(nextRows);
-    } finally {
-      setLoading(false);
+  const onSaveApiSettings = async () => {
+    setAuthError(null);
+    try {
+      await onAuthorizeSubmit(modalApiKey, modalApiProvider || "TaoStats");
+      setIsApiModalOpen(false);
+    } catch (e) {
+      setAuthError(e instanceof Error ? e.message : "Authorization failed");
     }
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      <div className="mx-auto max-w-6xl p-6">
-        <h1 className="mb-2 text-2xl font-semibold text-emerald-400">TAO PNL 24h Web Widget</h1>
-        <p className="mb-6 text-sm text-zinc-400">
-          Built on the Polkadot React template. Enter your TaoStats Authorization header and list of
-          SS58 addresses.
-        </p>
+    <div className="mx-auto max-w-4xl p-6">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <img
+            src="https://avatars.githubusercontent.com/u/231471174?s=200&v=4"
+            alt="TAO Radar logo"
+            className="h-10 w-10 rounded-md border border-zinc-700 object-cover"
+          />
+          <h1 className="text-3xl font-semibold text-emerald-400">TAO Radar Web Preview</h1>
+        </div>
+        <button
+          type="button"
+          onClick={onOpenApiModal}
+          className="rounded-md border border-cyan-700 px-3 py-2 text-sm font-semibold text-cyan-300 hover:border-cyan-500 disabled:opacity-60"
+          disabled={authState === "validating"}
+        >
+          {authButtonLabel}
+        </button>
+      </div>
+      <p className="mb-6 text-sm text-zinc-400">
+        Quick flow: 1) Authorize API key, 2) download Scriptable loader, 3) open Portfolio to copy payload.
+      </p>
 
-        <div className="grid gap-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4 md:grid-cols-2">
-          <label className="flex flex-col gap-2 text-sm">
-            <span className="text-zinc-300">Authorization Header (API key)</span>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="tao-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:xxxxxxxx"
-              className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-500"
-            />
-          </label>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5">
+          <h2 className="text-lg font-medium text-zinc-100">1. Build Widget Payload</h2>
+          <p className="mt-2 text-sm text-zinc-400">
+            Set network and addresses, preview 24h PNL, then copy base64 payload for widgetParameter.
+          </p>
+          <button
+            type="button"
+            onClick={() => goToPage("portfolio-settings")}
+            className="mt-4 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
+          >
+            Open Portfolio Settings
+          </button>
+        </div>
 
-          <label className="flex flex-col gap-2 text-sm">
-            <span className="text-zinc-300">Network</span>
-            <input
-              type="text"
-              value={network}
-              onChange={(e) => setNetwork(e.target.value)}
-              placeholder="finney"
-              className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-emerald-500"
-            />
-          </label>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5">
+          <h2 className="text-lg font-medium text-zinc-100">Metagraph</h2>
+          <p className="mt-2 text-sm text-zinc-400">
+            Metagraph visualization page will be added in a future update.
+          </p>
+          <button
+            type="button"
+            disabled
+            className="mt-4 cursor-not-allowed rounded-md bg-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 opacity-70"
+          >
+            Metagraph (Coming Soon)
+          </button>
+        </div>
 
-          <label className="md:col-span-2 flex flex-col gap-2 text-sm">
-            <span className="text-zinc-300">Addresses (comma, space, or newline separated)</span>
-            <textarea
-              value={addressesText}
-              onChange={(e) => setAddressesText(e.target.value)}
-              rows={5}
-              className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-xs outline-none focus:border-emerald-500"
-            />
-          </label>
-
-          <div className="md:col-span-2">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5 md:col-span-2">
+          <h2 className="text-lg font-medium text-zinc-100">2. Download Scriptable Loader</h2>
+          <p className="mt-2 text-sm text-zinc-400">
+            Use Authorize to set API values, then download{" "}
+            <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">web-main.js</code> with placeholders
+            injected.
+          </p>
+          <div className="mt-4 grid gap-3">
             <button
               type="button"
-              onClick={() => void onLookup()}
-              disabled={loading}
-              className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => void onDownloadLoader()}
+              disabled={!canDownloadLoader}
+              className="rounded-md border border-cyan-700 px-4 py-2 text-sm font-semibold text-cyan-300 hover:border-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {loading ? "Loading..." : "Fetch PNL"}
+              Download web-main.js
             </button>
+            {!canDownloadLoader && (
+              <p className="text-xs text-zinc-500">Authorize first to enable loader download.</p>
+            )}
+            {downloadStatus && <p className="text-xs text-cyan-300">{downloadStatus}</p>}
+            {downloadError && <p className="text-xs text-red-300">{downloadError}</p>}
           </div>
         </div>
 
-        {error && <p className="mt-4 rounded-md border border-red-800 bg-red-950 p-3 text-sm text-red-300">{error}</p>}
-
-        <div className="mt-6 overflow-x-auto rounded-lg border border-zinc-800">
-          <table className="w-full border-collapse text-sm">
-            <thead className="bg-zinc-900 text-left text-zinc-300">
-              <tr>
-                <th className="px-4 py-3">Address</th>
-                <th className="px-4 py-3 text-right">Total (TAO)</th>
-                <th className="px-4 py-3 text-right">24h Ago (TAO)</th>
-                <th className="px-4 py-3 text-right">24h PNL (TAO)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 && !loading ? (
-                <tr className="border-t border-zinc-800">
-                  <td className="px-4 py-4 text-zinc-500" colSpan={4}>
-                    Enter API key and addresses, then click Fetch PNL.
-                  </td>
-                </tr>
-              ) : (
-                rows.map((row) => (
-                  <tr className="border-t border-zinc-800" key={row.address}>
-                    <td className="px-4 py-3 text-cyan-400">{shortAddress(row.address)}</td>
-                    <td className="px-4 py-3 text-right text-amber-300">{formatTao(row.totalTao)}</td>
-                    <td className="px-4 py-3 text-right text-zinc-200">{formatTao(row.total24hAgoTao)}</td>
-                    <td
-                      className={`px-4 py-3 text-right ${
-                        row.pnl24hTao !== null && row.pnl24hTao < 0 ? "text-red-400" : "text-emerald-400"
-                      }`}
-                    >
-                      {formatSignedTao(row.pnl24hTao)}
-                      {row.error ? ` (${row.error})` : ""}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5 md:col-span-2">
+          <h2 className="text-lg font-medium text-zinc-100">Alternative GitLab Setup</h2>
+          <p className="mt-2 text-sm text-zinc-400">
+            You can also get the loader directly from GitLab and configure it manually.
+          </p>
+          <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-zinc-300">
+            <li>Open the GitLab file page.</li>
+            <li>
+              Copy raw file content into a new Scriptable script named{" "}
+              <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">web-main</code>.
+            </li>
+            <li>
+              Replace{" "}
+              <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">%(API_KEY)s</code> with your API key and{" "}
+              <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">%(API_PROVIDER)s</code> with{" "}
+              <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">TaoStats</code>.
+            </li>
+            <li>Save and run the script once in app mode, then use it as widget script.</li>
+          </ol>
+          <a
+            href="https://gitlab.com/tao-radar/scriptable-widgets/-/blob/main/scriptable/widgets/main/web-main.js?ref_type=heads"
+            target="_blank"
+            rel="noreferrer"
+            className="mt-4 inline-block text-sm font-medium text-cyan-300 hover:text-cyan-200"
+          >
+            Open web-main.js on GitLab
+          </a>
         </div>
-
-        <p className="mt-3 text-xs text-zinc-500">
-          Formula: `total_tao = balance_total * 10^-9`, `total_24h_ago_tao = balance_total_24hr_ago * 10^-9`,
-          `pnl_24h_tao = (balance_total - balance_total_24hr_ago) * 10^-9`.
-        </p>
       </div>
+
+      {isApiModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-xl rounded-lg border border-zinc-700 bg-zinc-900 p-4">
+            <h2 className="text-lg font-semibold text-zinc-100">API Settings</h2>
+            <p className="mt-1 text-xs text-zinc-400">Set API key/provider once for download and fetch flows.</p>
+
+            <div className="mt-4 grid gap-3">
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="text-zinc-400">API_KEY</span>
+                <input
+                  type="password"
+                  value={modalApiKey}
+                  onChange={(e) => setModalApiKey(e.target.value)}
+                  placeholder="tao-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:xxxxxxxx"
+                  className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-cyan-500"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="text-zinc-400">Provider</span>
+                <select
+                  value={modalApiProvider}
+                  onChange={(e) => setModalApiProvider(e.target.value)}
+                  className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-cyan-500"
+                >
+                  <option value="TaoStats">TaoStats</option>
+                  <option value="TaoRadar" disabled>
+                    TaoRadar (coming soon)
+                  </option>
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-3 rounded-md border border-zinc-700 bg-zinc-950 p-3 text-xs text-zinc-300">
+              {modalApiProvider === "TaoStats" ? (
+                <p>
+                  Get your API key at{" "}
+                  <a
+                    href="https://taostats.io/pro/api-keys"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-cyan-300 hover:text-cyan-200"
+                  >
+                    taostats.io/pro/api-keys
+                  </a>
+                  , then paste it into API_KEY.
+                </p>
+              ) : (
+                <p>TaoRadar provider instructions will be available in a future release.</p>
+              )}
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsApiModalOpen(false)}
+                className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:border-zinc-500"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void onSaveApiSettings()}
+                className="rounded-md bg-cyan-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-cyan-600"
+              >
+                {authState === "validating" ? "Authorizing..." : "Save"}
+              </button>
+            </div>
+            {authError && <p className="mt-2 text-xs text-red-300">{authError}</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function App() {
+  const [page, setPage] = useState<AppPage>(() => getPageFromHash(window.location.hash));
+  const [apiKey, setApiKey] = useState("");
+  const [apiProvider, setApiProvider] = useState("TaoStats");
+  const [authState, setAuthState] = useState<AuthState>("idle");
+
+  const onAuthorizeSubmit = async (nextApiKey: string, nextApiProvider: string) => {
+    const trimmedKey = nextApiKey.trim();
+    const trimmedProvider = nextApiProvider.trim() || "TaoStats";
+    setApiKey(trimmedKey);
+    setApiProvider(trimmedProvider);
+
+    if (!trimmedKey) {
+      setAuthState("invalid");
+      throw new Error("API key is required.");
+    }
+
+    setAuthState("validating");
+    const response = await fetch(
+      `${TAO_STATS_KEY_VALIDATE_URL}?apiKeyId=${encodeURIComponent(trimmedKey)}`,
+      { method: "GET" },
+    );
+    if (!response.ok) {
+      setAuthState("invalid");
+      throw new Error(`Authorization failed (HTTP ${response.status}).`);
+    }
+    setAuthState("authorized");
+  };
+
+  useEffect(() => {
+    const onHashChange = () => {
+      setPage(getPageFromHash(window.location.hash));
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      {page === "portfolio-settings" ? (
+        <PortfolioSettingsPage
+          onBackHome={() => goToPage("home")}
+          apiKey={apiKey}
+          apiProvider={apiProvider}
+          authState={authState}
+          onAuthorizeSubmit={onAuthorizeSubmit}
+        />
+      ) : (
+        <HomePage
+          apiKey={apiKey}
+          apiProvider={apiProvider}
+          authState={authState}
+          onAuthorizeSubmit={onAuthorizeSubmit}
+        />
+      )}
     </div>
   );
 }
