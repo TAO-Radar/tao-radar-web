@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { web3Accounts, web3Enable, web3FromAddress } from "@polkadot/extension-dapp";
 
 import "./App.css";
 
@@ -21,14 +20,6 @@ type AddressRow = {
   error?: string;
 };
 
-type WalletAccount = {
-  address: string;
-  meta?: {
-    name?: string;
-    source?: string;
-  };
-};
-
 function parseAddresses(raw: string): string[] {
   return Array.from(
     new Set(
@@ -48,12 +39,6 @@ function toNumber(v: unknown): number {
 function shortAddress(addr: string): string {
   if (addr.length <= 14) return addr;
   return `${addr.slice(0, 6)}...${addr.slice(-6)}`;
-}
-
-function stringToHex(value: string): string {
-  return `0x${Array.from(new TextEncoder().encode(value))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("")}`;
 }
 
 function formatTao(v: number | null): string {
@@ -92,13 +77,6 @@ async function fetchAccount(address: string, network: string, authHeader: string
 }
 
 function App() {
-  const [accounts, setAccounts] = useState<WalletAccount[]>([]);
-  const [selectedAccountAddress, setSelectedAccountAddress] = useState("");
-  const [walletAuthedAddress, setWalletAuthedAddress] = useState<string | null>(null);
-  const [walletAuthError, setWalletAuthError] = useState<string | null>(null);
-  const [walletAuthLoading, setWalletAuthLoading] = useState(false);
-  const [walletConnectLoading, setWalletConnectLoading] = useState(false);
-
   const [apiKey, setApiKey] = useState("");
   const [network, setNetwork] = useState(DEFAULT_NETWORK);
   const [addressesText, setAddressesText] = useState(
@@ -109,62 +87,6 @@ function App() {
   const [error, setError] = useState<string | null>(null);
 
   const addresses = useMemo(() => parseAddresses(addressesText), [addressesText]);
-  const selectedAccount = useMemo(
-    () => accounts.find((a) => a.address === selectedAccountAddress),
-    [accounts, selectedAccountAddress],
-  );
-  const isWalletAuthed = walletAuthedAddress !== null && walletAuthedAddress === selectedAccountAddress;
-
-  const onConnectWallet = async () => {
-    setWalletAuthError(null);
-    setWalletConnectLoading(true);
-    try {
-      const extensions = await web3Enable("TAO Radar PNL Web");
-      if (extensions.length === 0) {
-        setWalletAuthError("No Polkadot wallet extension authorized.");
-        return;
-      }
-      const loadedAccounts = (await web3Accounts()) as WalletAccount[];
-      setAccounts(loadedAccounts);
-      if (loadedAccounts.length > 0 && !selectedAccountAddress) {
-        setSelectedAccountAddress(loadedAccounts[0].address);
-      }
-    } catch (e) {
-      setWalletAuthError(e instanceof Error ? e.message : "Failed to connect wallet.");
-    } finally {
-      setWalletConnectLoading(false);
-    }
-  };
-
-  const onAuthenticateWallet = async () => {
-    setWalletAuthError(null);
-    if (!selectedAccount) {
-      setWalletAuthError("Select a connected Polkadot account first.");
-      return;
-    }
-
-    setWalletAuthLoading(true);
-    try {
-      const challenge = `TAO Radar auth | address=${selectedAccount.address} | ts=${Date.now()}`;
-      const injector = await web3FromAddress(selectedAccount.address);
-      const signRaw = injector?.signer?.signRaw;
-      if (!signRaw) {
-        setWalletAuthError("Selected wallet does not support signRaw.");
-        return;
-      }
-      await signRaw({
-        address: selectedAccount.address,
-        data: stringToHex(challenge),
-        type: "bytes",
-      });
-      setWalletAuthedAddress(selectedAccount.address);
-    } catch (e) {
-      setWalletAuthedAddress(null);
-      setWalletAuthError(e instanceof Error ? e.message : "Wallet signature rejected.");
-    } finally {
-      setWalletAuthLoading(false);
-    }
-  };
 
   const onLookup = async () => {
     setError(null);
@@ -176,10 +98,6 @@ function App() {
     }
     if (addresses.length === 0) {
       setError("Please provide at least one address.");
-      return;
-    }
-    if (!isWalletAuthed) {
-      setError("Please connect and authenticate a Polkadot account.");
       return;
     }
 
@@ -236,45 +154,6 @@ function App() {
         </p>
 
         <div className="grid gap-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4 md:grid-cols-2">
-          <div className="md:col-span-2 flex flex-wrap items-center gap-3 rounded-md border border-zinc-800 bg-zinc-950 p-3">
-            <button
-              type="button"
-              onClick={() => void onConnectWallet()}
-              disabled={walletConnectLoading}
-              className="rounded-md bg-zinc-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {walletConnectLoading ? "Connecting..." : "Connect Polkadot Wallet"}
-            </button>
-            <select
-              value={selectedAccountAddress}
-              onChange={(e) => {
-                setSelectedAccountAddress(e.target.value);
-                setWalletAuthedAddress(null);
-              }}
-              className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm outline-none focus:border-emerald-500"
-            >
-              <option value="">Select connected account</option>
-              {accounts.map((acc) => (
-                <option key={acc.address} value={acc.address}>
-                  {acc.meta?.name
-                    ? `${acc.meta.name} (${acc.meta.source ?? "wallet"}) - ${shortAddress(acc.address)}`
-                    : shortAddress(acc.address)}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => void onAuthenticateWallet()}
-              disabled={!selectedAccount || walletAuthLoading}
-              className="rounded-md bg-sky-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {walletAuthLoading ? "Authenticating..." : "Authenticate Wallet"}
-            </button>
-            <span className={`text-xs ${isWalletAuthed ? "text-emerald-400" : "text-zinc-400"}`}>
-              {isWalletAuthed ? `Authenticated: ${shortAddress(walletAuthedAddress ?? "")}` : "Not authenticated"}
-            </span>
-          </div>
-
           <label className="flex flex-col gap-2 text-sm">
             <span className="text-zinc-300">Authorization Header (API key)</span>
             <input
@@ -319,9 +198,6 @@ function App() {
           </div>
         </div>
 
-        {walletAuthError && (
-          <p className="mt-4 rounded-md border border-red-800 bg-red-950 p-3 text-sm text-red-300">{walletAuthError}</p>
-        )}
         {error && <p className="mt-4 rounded-md border border-red-800 bg-red-950 p-3 text-sm text-red-300">{error}</p>}
 
         <div className="mt-6 overflow-x-auto rounded-lg border border-zinc-800">
