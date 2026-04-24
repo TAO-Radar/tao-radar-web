@@ -5,7 +5,7 @@ import { PortfolioSettingsPage } from "./PortfolioSettingsPage";
 
 type AppPage = "home" | "portfolio-settings";
 const SCRIPTABLE_WEB_MAIN_URL =
-  "/widgets/main/web-main.js";
+  "https://widgets.taoradar.space/main/web-main.js";
 const TAO_STATS_KEY_VALIDATE_URL = "https://management-api.taostats.io/api/v1/key/validate";
 
 type AuthState = "idle" | "validating" | "authorized" | "invalid";
@@ -79,11 +79,9 @@ function HomePage({ apiKey, apiProvider, authState, onAuthorizeSubmit }: HomePag
       }
 
       const template = await response.text();
-      const resolvedLibraryBaseUrl = `${window.location.origin}/widgets/main`;
       const customized = applyLoaderParams(template, {
         "${API_KEY}": apiKey.trim(),
         "${API_PROVIDER}": apiProvider.trim() || "TaoStats",
-        "${LIBRARY_BASE_URL}": resolvedLibraryBaseUrl,
       });
       if (hasUnresolvedPlaceholders(customized)) {
         throw new Error("Template still contains unresolved placeholders.");
@@ -223,13 +221,7 @@ function HomePage({ apiKey, apiProvider, authState, onAuthorizeSubmit }: HomePag
                   Replace{" "}
                   <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">${"{API_KEY}"}</code> with your API
                   key and <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">${"{API_PROVIDER}"}</code>{" "}
-                  with <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">TaoStats</code>. Optionally
-                  set{" "}
-                  <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">${"{LIBRARY_BASE_URL}"}</code> to{" "}
-                  <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">
-                    https://taoradar.space/widgets/main
-                  </code>
-                  .
+                  with <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">TaoStats</code>.
                 </li>
                 <li>Save and run the script once in app mode, then use it as widget script.</li>
               </ol>

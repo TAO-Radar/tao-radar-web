@@ -1,7 +1,0 @@
-{
-  "moduleUrl": "https://taoradar.space/widgets/bittensor/network/metagraph-new.js",
-  "cacheKey": "metagraph-new_main",
-  "params": {
-    "message": "Hello from payload"
-  }
-}
