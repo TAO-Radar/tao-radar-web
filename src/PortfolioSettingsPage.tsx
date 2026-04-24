@@ -159,7 +159,6 @@ export function PortfolioSettingsPage({
   authState,
   onAuthorizeSubmit,
 }: PortfolioSettingsPageProps) {
-  const [network, setNetwork] = useState(DEFAULT_NETWORK);
   const [addressesText, setAddressesText] = useState(
     "5FqdCPXAM6u9N8fdqRA2RWyQsJeBG63UoQEga4vVAKAAyA4v",
   );
@@ -181,10 +180,6 @@ export function PortfolioSettingsPage({
 
   const validateInputsForPayload = (): boolean => {
     setShowValidation(true);
-    if (!network.trim()) {
-      setError("Network is required.");
-      return false;
-    }
     if (addresses.length === 0) {
       setError("Please provide at least one address.");
       return false;
@@ -239,7 +234,7 @@ export function PortfolioSettingsPage({
           const chunkRows = await Promise.all(
             chunk.map(async (address): Promise<AddressRow> => {
               try {
-                const account = await fetchAccount(address, network, apiKey.trim());
+                const account = await fetchAccount(address, DEFAULT_NETWORK, apiKey.trim());
                 const balanceTotal = toNumber(account.balance_total);
                 const balanceTotal24hAgo = toNumber(account.balance_total_24hr_ago);
 
@@ -291,7 +286,6 @@ export function PortfolioSettingsPage({
       repo: "https://gitlab.com/tao-radar/scriptable-widgets",
       path: "scriptable/widgets/bittensor/network",
       params: {
-        network: network.trim(),
         addresses,
         apiProvider: apiProvider || "TaoStats",
       },
@@ -317,6 +311,8 @@ export function PortfolioSettingsPage({
     setAuthError(null);
     try {
       await onAuthorizeSubmit(modalApiKey, modalApiProvider || "TaoStats");
+      setError(null);
+      setRows([]);
       setIsApiModalOpen(false);
     } catch (e) {
       setAuthError(e instanceof Error ? e.message : "Authorization failed");
@@ -330,7 +326,6 @@ export function PortfolioSettingsPage({
         ? `Authorized (${apiProvider || "TaoStats"})`
         : "Authorize";
 
-  const networkInvalid = showValidation && !network.trim();
   const addressesInvalid = showValidation && (addresses.length === 0 || invalidAddresses.length > 0);
 
   return (
@@ -360,24 +355,11 @@ export function PortfolioSettingsPage({
       <div>
         <h1 className="mb-2 text-2xl font-semibold text-emerald-400">TAO PNL 24h Web Widget</h1>
         <p className="mb-6 text-sm text-zinc-400">
-          Add addresses, optionally test balances with Fetch, then copy payload for Scriptable widgetParameter.
+          Add addresses, optionally test balances on finney with Fetch, then copy payload for Scriptable
+          widgetParameter.
         </p>
 
         <div className="grid gap-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4 md:grid-cols-2">
-          <label className="flex flex-col gap-2 text-sm">
-            <span className="text-zinc-300">Network</span>
-            <input
-              type="text"
-              value={network}
-              onChange={(e) => setNetwork(e.target.value)}
-              placeholder="finney"
-              required
-              className={`rounded-md border bg-zinc-950 px-3 py-2 outline-none ${
-                networkInvalid ? "border-red-500 focus:border-red-500" : "border-zinc-700 focus:border-emerald-500"
-              }`}
-            />
-          </label>
-
           <label className="md:col-span-2 flex flex-col gap-2 text-sm">
             <span className="text-zinc-300">Addresses (comma, space, or newline separated)</span>
             <textarea
@@ -428,7 +410,7 @@ export function PortfolioSettingsPage({
               {rows.length === 0 && !loading ? (
                 <tr className="border-t border-zinc-800">
                   <td className="px-4 py-4 text-zinc-500" colSpan={4}>
-                    Enter API key and addresses, then click Fetch PNL.
+                    Enter addresses, then click Fetch PNL.
                   </td>
                 </tr>
               ) : (

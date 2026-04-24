@@ -5,13 +5,17 @@ import { PortfolioSettingsPage } from "./PortfolioSettingsPage";
 
 type AppPage = "home" | "portfolio-settings";
 const SCRIPTABLE_WEB_MAIN_URL =
-  "https://gitlab.com/tao-radar/scriptable-widgets/-/raw/main/scriptable/widgets/main/web-main.js?ref_type=heads";
+  "/widgets/main/web-main.js";
 const TAO_STATS_KEY_VALIDATE_URL = "https://management-api.taostats.io/api/v1/key/validate";
 
 type AuthState = "idle" | "validating" | "authorized" | "invalid";
 
-function applyLoaderParams(template: string, apiKey: string, apiProvider: string): string {
-  return template.split("%(API_KEY)s").join(apiKey).split("%(API_PROVIDER)s").join(apiProvider);
+function applyLoaderParams(template: string, values: Record<string, string>): string {
+  return Object.entries(values).reduce((out, [token, value]) => out.split(token).join(value), template);
+}
+
+function hasUnresolvedPlaceholders(content: string): boolean {
+  return /\$\{[A-Z0-9_]+\}/.test(content);
 }
 
 function triggerFileDownload(filename: string, content: string): void {
@@ -48,6 +52,7 @@ function HomePage({ apiKey, apiProvider, authState, onAuthorizeSubmit }: HomePag
   const [modalApiKey, setModalApiKey] = useState(apiKey);
   const [modalApiProvider, setModalApiProvider] = useState(apiProvider || "TaoStats");
   const [authError, setAuthError] = useState<string | null>(null);
+  const [isAltSetupOpen, setIsAltSetupOpen] = useState(false);
 
   const authButtonLabel =
     authState === "validating"
@@ -74,7 +79,15 @@ function HomePage({ apiKey, apiProvider, authState, onAuthorizeSubmit }: HomePag
       }
 
       const template = await response.text();
-      const customized = applyLoaderParams(template, apiKey.trim(), apiProvider.trim() || "TaoStats");
+      const resolvedLibraryBaseUrl = `${window.location.origin}/widgets/main`;
+      const customized = applyLoaderParams(template, {
+        "${API_KEY}": apiKey.trim(),
+        "${API_PROVIDER}": apiProvider.trim() || "TaoStats",
+        "${LIBRARY_BASE_URL}": resolvedLibraryBaseUrl,
+      });
+      if (hasUnresolvedPlaceholders(customized)) {
+        throw new Error("Template still contains unresolved placeholders.");
+      }
       const outputName = "taoradar-web-main.js";
       triggerFileDownload(outputName, customized);
       setDownloadStatus(`Downloaded ${outputName}`);
@@ -110,7 +123,7 @@ function HomePage({ apiKey, apiProvider, authState, onAuthorizeSubmit }: HomePag
             alt="TAO Radar logo"
             className="h-10 w-10 rounded-md border border-zinc-700 object-cover"
           />
-          <h1 className="text-3xl font-semibold text-emerald-400">TAO Radar Web Preview</h1>
+          <h1 className="text-3xl font-semibold text-emerald-400">TAO Radar Web</h1>
         </div>
         <button
           type="button"
@@ -121,15 +134,21 @@ function HomePage({ apiKey, apiProvider, authState, onAuthorizeSubmit }: HomePag
           {authButtonLabel}
         </button>
       </div>
-      <p className="mb-6 text-sm text-zinc-400">
-        Quick flow: 1) Authorize API key, 2) download Scriptable loader, 3) open Portfolio to copy payload.
-      </p>
+      <div className="mb-6 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+        <p className="text-sm font-semibold text-zinc-200">Quick flow</p>
+        <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-zinc-400">
+          <li>Authorize your API key</li>
+          <li>Download TAO Radar Bootstrap script</li>
+          <li>Open Portfolio or Metagraph and get payload</li>
+          <li>Paste payload into Scriptable widget parameter</li>
+        </ol>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5">
-          <h2 className="text-lg font-medium text-zinc-100">1. Build Widget Payload</h2>
+          <h2 className="text-lg font-medium text-zinc-100">Portfolio</h2>
           <p className="mt-2 text-sm text-zinc-400">
-            Set network and addresses, preview 24h PNL, then copy base64 payload for widgetParameter.
+            Set addresses, check balance changes, and copy the parameter for the portfolio widget.
           </p>
           <button
             type="button"
@@ -143,7 +162,7 @@ function HomePage({ apiKey, apiProvider, authState, onAuthorizeSubmit }: HomePag
         <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5">
           <h2 className="text-lg font-medium text-zinc-100">Metagraph</h2>
           <p className="mt-2 text-sm text-zinc-400">
-            Metagraph visualization page will be added in a future update.
+            Configure and generate the parameter for the metagraph widget in a future update.
           </p>
           <button
             type="button"
@@ -157,7 +176,7 @@ function HomePage({ apiKey, apiProvider, authState, onAuthorizeSubmit }: HomePag
         <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5 md:col-span-2">
           <h2 className="text-lg font-medium text-zinc-100">2. Download Scriptable Loader</h2>
           <p className="mt-2 text-sm text-zinc-400">
-            Use Authorize to set API values, then download{" "}
+            Use Authorize to set API values, then download TAO Radar Bootstrap{" "}
             <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">web-main.js</code> with placeholders
             injected.
           </p>
@@ -179,32 +198,51 @@ function HomePage({ apiKey, apiProvider, authState, onAuthorizeSubmit }: HomePag
         </div>
 
         <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5 md:col-span-2">
-          <h2 className="text-lg font-medium text-zinc-100">Alternative GitLab Setup</h2>
-          <p className="mt-2 text-sm text-zinc-400">
-            You can also get the loader directly from GitLab and configure it manually.
-          </p>
-          <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-zinc-300">
-            <li>Open the GitLab file page.</li>
-            <li>
-              Copy raw file content into a new Scriptable script named{" "}
-              <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">web-main</code>.
-            </li>
-            <li>
-              Replace{" "}
-              <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">%(API_KEY)s</code> with your API key and{" "}
-              <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">%(API_PROVIDER)s</code> with{" "}
-              <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">TaoStats</code>.
-            </li>
-            <li>Save and run the script once in app mode, then use it as widget script.</li>
-          </ol>
-          <a
-            href="https://gitlab.com/tao-radar/scriptable-widgets/-/blob/main/scriptable/widgets/main/web-main.js?ref_type=heads"
-            target="_blank"
-            rel="noreferrer"
-            className="mt-4 inline-block text-sm font-medium text-cyan-300 hover:text-cyan-200"
-          >
-            Open web-main.js on GitLab
-          </a>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-medium text-zinc-100">Alternative GitLab Setup</h2>
+            <button
+              type="button"
+              onClick={() => setIsAltSetupOpen((prev) => !prev)}
+              className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:border-zinc-500"
+            >
+              {isAltSetupOpen ? "Hide" : "Show"}
+            </button>
+          </div>
+          {isAltSetupOpen && (
+            <>
+              <p className="mt-2 text-sm text-zinc-400">
+                You can also get the loader directly from GitLab and configure it manually.
+              </p>
+              <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-zinc-300">
+                <li>Open the GitLab file page.</li>
+                <li>
+                  Copy raw file content into a new Scriptable script named{" "}
+                  <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">web-main</code>.
+                </li>
+                <li>
+                  Replace{" "}
+                  <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">${"{API_KEY}"}</code> with your API
+                  key and <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">${"{API_PROVIDER}"}</code>{" "}
+                  with <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">TaoStats</code>. Optionally
+                  set{" "}
+                  <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">${"{LIBRARY_BASE_URL}"}</code> to{" "}
+                  <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">
+                    https://taoradar.space/widgets/main
+                  </code>
+                  .
+                </li>
+                <li>Save and run the script once in app mode, then use it as widget script.</li>
+              </ol>
+              <a
+                href="https://gitlab.com/tao-radar/scriptable-widgets/-/blob/main/scriptable/widgets/main/web-main.js?ref_type=heads"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-block text-sm font-medium text-cyan-300 hover:text-cyan-200"
+              >
+                Open web-main.js on GitLab
+              </a>
+            </>
+          )}
         </div>
       </div>
 
