@@ -6,6 +6,9 @@ const DEFAULT_NETWORK = "finney";
 const TAO_STATS_ACCOUNT_URL = "https://api.taostats.io/api/account/latest/v1";
 const TAO_STATS_KEY_VALIDATE_URL = "https://management-api.taostats.io/api/v1/key/validate";
 const MAX_429_RETRIES = 3;
+const WIDGETS_BASE_URL = "https://widgets.taoradar.space";
+const PORTFOLIO_WIDGET_MODULE_URL = `${WIDGETS_BASE_URL}/bittensor/portfolio/index.js`;
+const PORTFOLIO_WIDGET_MANIFEST_URL = `${WIDGETS_BASE_URL}/bittensor/portfolio/manifest.json`;
 
 type TaoStatsAccount = {
   balance_total?: string;
@@ -148,14 +151,20 @@ type PortfolioSettingsPageProps = {
   onBackHome: () => void;
   apiKey: string;
   apiProvider: string;
+  shouldPersistApiKey: boolean;
   authState: "idle" | "validating" | "authorized" | "invalid";
-  onAuthorizeSubmit: (nextApiKey: string, nextApiProvider: string) => Promise<void>;
+  onAuthorizeSubmit: (
+    nextApiKey: string,
+    nextApiProvider: string,
+    persistApiKey: boolean,
+  ) => Promise<void>;
 };
 
 export function PortfolioSettingsPage({
   onBackHome,
   apiKey,
   apiProvider,
+  shouldPersistApiKey,
   authState,
   onAuthorizeSubmit,
 }: PortfolioSettingsPageProps) {
@@ -170,6 +179,7 @@ export function PortfolioSettingsPage({
   const [isApiModalOpen, setIsApiModalOpen] = useState(false);
   const [modalApiKey, setModalApiKey] = useState(apiKey);
   const [modalApiProvider, setModalApiProvider] = useState(apiProvider || "TaoStats");
+  const [modalPersistApiKey, setModalPersistApiKey] = useState(shouldPersistApiKey);
   const [authError, setAuthError] = useState<string | null>(null);
 
   const addresses = useMemo(() => parseAddresses(addressesText), [addressesText]);
@@ -281,13 +291,12 @@ export function PortfolioSettingsPage({
     }
 
     const payload = {
-      name: "tao-pnl24h",
-      branch: "main",
-      repo: "https://gitlab.com/tao-radar/scriptable-widgets",
-      path: "scriptable/widgets/bittensor/network",
+      moduleUrl: PORTFOLIO_WIDGET_MODULE_URL,
+      manifestUrl: PORTFOLIO_WIDGET_MANIFEST_URL,
+      cacheKey: "portfolio_main",
       params: {
         addresses,
-        apiProvider: apiProvider || "TaoStats",
+        currencies: ["TAO"],
       },
     };
 
@@ -303,6 +312,7 @@ export function PortfolioSettingsPage({
   const onOpenApiModal = () => {
     setModalApiKey(apiKey);
     setModalApiProvider(apiProvider || "TaoStats");
+    setModalPersistApiKey(shouldPersistApiKey);
     setAuthError(null);
     setIsApiModalOpen(true);
   };
@@ -310,7 +320,7 @@ export function PortfolioSettingsPage({
   const onSaveApiSettings = async () => {
     setAuthError(null);
     try {
-      await onAuthorizeSubmit(modalApiKey, modalApiProvider || "TaoStats");
+      await onAuthorizeSubmit(modalApiKey, modalApiProvider || "TaoStats", modalPersistApiKey);
       setError(null);
       setRows([]);
       setIsApiModalOpen(false);
@@ -355,8 +365,27 @@ export function PortfolioSettingsPage({
       <div>
         <h1 className="mb-2 text-2xl font-semibold text-emerald-400">TAO PNL 24h Web Widget</h1>
         <p className="mb-6 text-sm text-zinc-400">
-          Add addresses, optionally test balances on finney with Fetch, then copy payload for Scriptable
-          widgetParameter.
+          Add addresses, optionally test balances on finney with Fetch, then copy the base64 payload for the
+          Scriptable portfolio widget (<code className="text-zinc-300">params.addresses</code>,{" "}
+          <code className="text-zinc-300">params.currencies</code>). Hosted module:{" "}
+          <a
+            href={PORTFOLIO_WIDGET_MODULE_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="text-cyan-300 hover:text-cyan-200"
+          >
+            index.js
+          </a>
+          , manifest:{" "}
+          <a
+            href={PORTFOLIO_WIDGET_MANIFEST_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="text-cyan-300 hover:text-cyan-200"
+          >
+            manifest.json
+          </a>
+          .
         </p>
 
         <div className="grid gap-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4 md:grid-cols-2">
@@ -493,6 +522,30 @@ export function PortfolioSettingsPage({
                 <p>TaoRadar provider instructions will be available in a future release.</p>
               )}
             </div>
+            <label className="mt-3 flex items-start gap-2 rounded-md border border-amber-700/50 bg-amber-950/20 p-3 text-xs text-amber-100">
+              <input
+                type="checkbox"
+                checked={modalPersistApiKey}
+                onChange={(e) => setModalPersistApiKey(e.target.checked)}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>
+                Store API key in browser storage (insecure). Any script running in this browser context can
+                potentially read it through XSS or malicious extension attacks.
+              </span>
+            </label>
+            <p className="mt-2 text-xs text-zinc-400">
+              Learn more:{" "}
+              <a
+                href="https://auth0.com/blog/secure-browser-storage-the-facts/"
+                target="_blank"
+                rel="noreferrer"
+                className="text-cyan-300 hover:text-cyan-200"
+              >
+                Browser storage security risks and attack vectors
+              </a>
+              .
+            </p>
 
             <div className="mt-4 flex justify-end gap-2">
               <button

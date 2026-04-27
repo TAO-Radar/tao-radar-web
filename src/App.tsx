@@ -5,8 +5,9 @@ import { PortfolioSettingsPage } from "./PortfolioSettingsPage";
 
 type AppPage = "home" | "portfolio-settings";
 const SCRIPTABLE_WEB_MAIN_URL =
-  "https://widgets.taoradar.space/main/web-main.js";
+  "https://widgets.taoradar.space/main/web-main/web-main.js";
 const TAO_STATS_KEY_VALIDATE_URL = "https://management-api.taostats.io/api/v1/key/validate";
+const STORED_AUTH_SETTINGS_KEY = "taoradar.authSettings";
 
 type AuthState = "idle" | "validating" | "authorized" | "invalid";
 
@@ -41,16 +42,28 @@ function goToPage(page: AppPage): void {
 type HomePageProps = {
   apiKey: string;
   apiProvider: string;
+  shouldPersistApiKey: boolean;
   authState: AuthState;
-  onAuthorizeSubmit: (nextApiKey: string, nextApiProvider: string) => Promise<void>;
+  onAuthorizeSubmit: (
+    nextApiKey: string,
+    nextApiProvider: string,
+    persistApiKey: boolean,
+  ) => Promise<void>;
 };
 
-function HomePage({ apiKey, apiProvider, authState, onAuthorizeSubmit }: HomePageProps) {
+function HomePage({
+  apiKey,
+  apiProvider,
+  shouldPersistApiKey,
+  authState,
+  onAuthorizeSubmit,
+}: HomePageProps) {
   const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [isApiModalOpen, setIsApiModalOpen] = useState(false);
   const [modalApiKey, setModalApiKey] = useState(apiKey);
   const [modalApiProvider, setModalApiProvider] = useState(apiProvider || "TaoStats");
+  const [modalPersistApiKey, setModalPersistApiKey] = useState(shouldPersistApiKey);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAltSetupOpen, setIsAltSetupOpen] = useState(false);
 
@@ -98,6 +111,7 @@ function HomePage({ apiKey, apiProvider, authState, onAuthorizeSubmit }: HomePag
   const onOpenApiModal = () => {
     setModalApiKey(apiKey);
     setModalApiProvider(apiProvider || "TaoStats");
+    setModalPersistApiKey(shouldPersistApiKey);
     setAuthError(null);
     setIsApiModalOpen(true);
   };
@@ -105,7 +119,7 @@ function HomePage({ apiKey, apiProvider, authState, onAuthorizeSubmit }: HomePag
   const onSaveApiSettings = async () => {
     setAuthError(null);
     try {
-      await onAuthorizeSubmit(modalApiKey, modalApiProvider || "TaoStats");
+      await onAuthorizeSubmit(modalApiKey, modalApiProvider || "TaoStats", modalPersistApiKey);
       setIsApiModalOpen(false);
     } catch (e) {
       setAuthError(e instanceof Error ? e.message : "Authorization failed");
@@ -197,7 +211,7 @@ function HomePage({ apiKey, apiProvider, authState, onAuthorizeSubmit }: HomePag
 
         <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5 md:col-span-2">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-medium text-zinc-100">Alternative GitLab Setup</h2>
+            <h2 className="text-lg font-medium text-zinc-100">Alternative Direct Setup</h2>
             <button
               type="button"
               onClick={() => setIsAltSetupOpen((prev) => !prev)}
@@ -209,10 +223,10 @@ function HomePage({ apiKey, apiProvider, authState, onAuthorizeSubmit }: HomePag
           {isAltSetupOpen && (
             <>
               <p className="mt-2 text-sm text-zinc-400">
-                You can also get the loader directly from GitLab and configure it manually.
+                You can also get the loader directly from widgets.taoradar.space and configure it manually.
               </p>
               <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-zinc-300">
-                <li>Open the GitLab file page.</li>
+                <li>Open the hosted loader file page.</li>
                 <li>
                   Copy raw file content into a new Scriptable script named{" "}
                   <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">web-main</code>.
@@ -226,12 +240,12 @@ function HomePage({ apiKey, apiProvider, authState, onAuthorizeSubmit }: HomePag
                 <li>Save and run the script once in app mode, then use it as widget script.</li>
               </ol>
               <a
-                href="https://gitlab.com/tao-radar/scriptable-widgets/-/blob/main/scriptable/widgets/main/web-main.js?ref_type=heads"
+                href="https://widgets.taoradar.space/main/web-main/web-main.js"
                 target="_blank"
                 rel="noreferrer"
                 className="mt-4 inline-block text-sm font-medium text-cyan-300 hover:text-cyan-200"
               >
-                Open web-main.js on GitLab
+                Open web-main.js on widgets.taoradar.space
               </a>
             </>
           )}
@@ -288,6 +302,30 @@ function HomePage({ apiKey, apiProvider, authState, onAuthorizeSubmit }: HomePag
                 <p>TaoRadar provider instructions will be available in a future release.</p>
               )}
             </div>
+            <label className="mt-3 flex items-start gap-2 rounded-md border border-amber-700/50 bg-amber-950/20 p-3 text-xs text-amber-100">
+              <input
+                type="checkbox"
+                checked={modalPersistApiKey}
+                onChange={(e) => setModalPersistApiKey(e.target.checked)}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>
+                Store API key in browser storage (insecure). Any script running in this browser context can
+                potentially read it through XSS or malicious extension attacks.
+              </span>
+            </label>
+            <p className="mt-2 text-xs text-zinc-400">
+              Learn more:{" "}
+              <a
+                href="https://auth0.com/blog/secure-browser-storage-the-facts/"
+                target="_blank"
+                rel="noreferrer"
+                className="text-cyan-300 hover:text-cyan-200"
+              >
+                Browser storage security risks and attack vectors
+              </a>
+              .
+            </p>
 
             <div className="mt-4 flex justify-end gap-2">
               <button
@@ -317,13 +355,19 @@ function App() {
   const [page, setPage] = useState<AppPage>(() => getPageFromHash(window.location.hash));
   const [apiKey, setApiKey] = useState("");
   const [apiProvider, setApiProvider] = useState("TaoStats");
+  const [shouldPersistApiKey, setShouldPersistApiKey] = useState(false);
   const [authState, setAuthState] = useState<AuthState>("idle");
 
-  const onAuthorizeSubmit = async (nextApiKey: string, nextApiProvider: string) => {
+  const onAuthorizeSubmit = async (
+    nextApiKey: string,
+    nextApiProvider: string,
+    persistApiKey: boolean,
+  ) => {
     const trimmedKey = nextApiKey.trim();
     const trimmedProvider = nextApiProvider.trim() || "TaoStats";
     setApiKey(trimmedKey);
     setApiProvider(trimmedProvider);
+    setShouldPersistApiKey(persistApiKey);
 
     if (!trimmedKey) {
       setAuthState("invalid");
@@ -339,6 +383,18 @@ function App() {
       setAuthState("invalid");
       throw new Error(`Authorization failed (HTTP ${response.status}).`);
     }
+    if (persistApiKey) {
+      localStorage.setItem(
+        STORED_AUTH_SETTINGS_KEY,
+        JSON.stringify({
+          apiKey: trimmedKey,
+          apiProvider: trimmedProvider,
+          shouldPersistApiKey: true,
+        }),
+      );
+    } else {
+      localStorage.removeItem(STORED_AUTH_SETTINGS_KEY);
+    }
     setAuthState("authorized");
   };
 
@@ -350,6 +406,31 @@ function App() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
+  useEffect(() => {
+    const stored = localStorage.getItem(STORED_AUTH_SETTINGS_KEY);
+    if (!stored) {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(stored) as {
+        apiKey?: string;
+        apiProvider?: string;
+        shouldPersistApiKey?: boolean;
+      };
+      const restoredKey = parsed.apiKey?.trim() ?? "";
+      if (!restoredKey) {
+        localStorage.removeItem(STORED_AUTH_SETTINGS_KEY);
+        return;
+      }
+      setApiKey(restoredKey);
+      setApiProvider(parsed.apiProvider?.trim() || "TaoStats");
+      setShouldPersistApiKey(Boolean(parsed.shouldPersistApiKey));
+      setAuthState("authorized");
+    } catch {
+      localStorage.removeItem(STORED_AUTH_SETTINGS_KEY);
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       {page === "portfolio-settings" ? (
@@ -357,6 +438,7 @@ function App() {
           onBackHome={() => goToPage("home")}
           apiKey={apiKey}
           apiProvider={apiProvider}
+          shouldPersistApiKey={shouldPersistApiKey}
           authState={authState}
           onAuthorizeSubmit={onAuthorizeSubmit}
         />
@@ -364,6 +446,7 @@ function App() {
         <HomePage
           apiKey={apiKey}
           apiProvider={apiProvider}
+          shouldPersistApiKey={shouldPersistApiKey}
           authState={authState}
           onAuthorizeSubmit={onAuthorizeSubmit}
         />
