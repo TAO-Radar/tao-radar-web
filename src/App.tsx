@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type MouseEvent, useEffect, useRef, useState } from "react";
 
 import "./App.css";
 import { PortfolioSettingsPage } from "./PortfolioSettingsPage";
@@ -66,6 +66,14 @@ function HomePage({
   const [modalPersistApiKey, setModalPersistApiKey] = useState(shouldPersistApiKey);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAltSetupOpen, setIsAltSetupOpen] = useState(false);
+  const [isAuthorizeHighlighted, setIsAuthorizeHighlighted] = useState(false);
+  const [isDownloadHighlighted, setIsDownloadHighlighted] = useState(false);
+  const [isPortfolioHighlighted, setIsPortfolioHighlighted] = useState(false);
+  const [isMetagraphHighlighted, setIsMetagraphHighlighted] = useState(false);
+  const authorizeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const downloadSectionRef = useRef<HTMLDivElement | null>(null);
+  const portfolioSectionRef = useRef<HTMLDivElement | null>(null);
+  const metagraphSectionRef = useRef<HTMLDivElement | null>(null);
 
   const authButtonLabel =
     authState === "validating"
@@ -126,6 +134,74 @@ function HomePage({
     }
   };
 
+  const onJumpToDownload = (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    downloadSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.history.replaceState(null, "", "#download-bootstrap");
+    setIsDownloadHighlighted(true);
+  };
+
+  const onJumpToAuthorize = (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    authorizeButtonRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.history.replaceState(null, "", "#authorize-api");
+    setIsAuthorizeHighlighted(true);
+  };
+
+  const onJumpToPortfolio = (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    portfolioSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.history.replaceState(null, "", "#portfolio-section");
+    setIsPortfolioHighlighted(true);
+  };
+
+  const onJumpToMetagraph = (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    metagraphSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.history.replaceState(null, "", "#metagraph-section");
+    setIsMetagraphHighlighted(true);
+  };
+
+  useEffect(() => {
+    if (!isAuthorizeHighlighted) {
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setIsAuthorizeHighlighted(false);
+    }, 1100);
+    return () => window.clearTimeout(timeoutId);
+  }, [isAuthorizeHighlighted]);
+
+  useEffect(() => {
+    if (!isDownloadHighlighted) {
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setIsDownloadHighlighted(false);
+    }, 1100);
+    return () => window.clearTimeout(timeoutId);
+  }, [isDownloadHighlighted]);
+
+  useEffect(() => {
+    if (!isPortfolioHighlighted) {
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setIsPortfolioHighlighted(false);
+    }, 1100);
+    return () => window.clearTimeout(timeoutId);
+  }, [isPortfolioHighlighted]);
+
+  useEffect(() => {
+    if (!isMetagraphHighlighted) {
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setIsMetagraphHighlighted(false);
+    }, 1100);
+    return () => window.clearTimeout(timeoutId);
+  }, [isMetagraphHighlighted]);
+
   return (
     <div className="mx-auto max-w-4xl p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -135,12 +211,18 @@ function HomePage({
             alt="TAO Radar logo"
             className="h-10 w-10 rounded-md border border-zinc-700 object-cover"
           />
-          <h1 className="text-3xl font-semibold text-emerald-400">TAO Radar</h1>
+          <h1 className="text-3xl font-semibold text-emerald-400">TAO Radar Web</h1>
         </div>
         <button
+          id="authorize-api"
+          ref={authorizeButtonRef}
           type="button"
           onClick={onOpenApiModal}
-          className="rounded-md border border-cyan-700 px-3 py-2 text-sm font-semibold text-cyan-300 hover:border-cyan-500 disabled:opacity-60"
+          className={`rounded-md border px-3 py-2 text-sm font-semibold text-cyan-300 transition-all duration-300 hover:border-cyan-500 disabled:opacity-60 ${
+            isAuthorizeHighlighted
+              ? "border-cyan-300 shadow-[0_0_0_3px_rgba(34,211,238,0.25)]"
+              : "border-cyan-700"
+          }`}
           disabled={authState === "validating"}
         >
           {authButtonLabel}
@@ -149,15 +231,89 @@ function HomePage({
       <div className="mb-6 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
         <p className="text-sm font-semibold text-zinc-200">Quick flow</p>
         <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-zinc-400">
-          <li>Authorize your API key</li>
-          <li>Download TAO Radar Bootstrap script</li>
-          <li>Open Portfolio or Metagraph and get payload</li>
+          <li>
+            <a
+              href="#authorize-api"
+              onClick={onJumpToAuthorize}
+              className="text-cyan-300 hover:text-cyan-200 hover:underline"
+            >
+              Authorize your API key
+            </a>
+          </li>
+          <li>
+            <a
+              href="#download-bootstrap"
+              onClick={onJumpToDownload}
+              className="text-cyan-300 hover:text-cyan-200 hover:underline"
+            >
+              Download TAO Radar Bootstrap script
+            </a>
+          </li>
+          <li>
+            Open{" "}
+            <a
+              href="#portfolio-section"
+              onClick={onJumpToPortfolio}
+              className="text-cyan-300 hover:text-cyan-200 hover:underline"
+            >
+              Portfolio
+            </a>{" "}
+            or{" "}
+            <a
+              href="#metagraph-section"
+              onClick={onJumpToMetagraph}
+              className="text-cyan-300 hover:text-cyan-200 hover:underline"
+            >
+              Metagraph
+            </a>{" "}
+            and get payload
+          </li>
           <li>Paste payload into Scriptable widget parameter</li>
         </ol>
       </div>
 
+      <div
+        id="download-bootstrap"
+        ref={downloadSectionRef}
+        className={`mb-4 rounded-lg border bg-zinc-900 p-5 transition-all duration-300 ${
+          isDownloadHighlighted
+            ? "border-cyan-400 shadow-[0_0_0_3px_rgba(34,211,238,0.25)]"
+            : "border-zinc-800"
+        }`}
+      >
+        <h2 className="text-lg font-medium text-zinc-100">2. Download Scriptable Loader</h2>
+        <p className="mt-2 text-sm text-zinc-400">
+          Use Authorize to set API values, then download TAO Radar Bootstrap{" "}
+          <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">web-main.js</code> with placeholders
+          injected.
+        </p>
+        <div className="mt-4 grid gap-3">
+          <button
+            type="button"
+            onClick={() => void onDownloadLoader()}
+            disabled={!canDownloadLoader}
+            className="rounded-md border border-cyan-700 px-4 py-2 text-sm font-semibold text-cyan-300 hover:border-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Download web-main.js
+          </button>
+          {!canDownloadLoader && (
+            <p className="text-xs text-zinc-500">Authorize first to enable loader download.</p>
+          )}
+          {downloadStatus && <p className="text-xs text-cyan-300">{downloadStatus}</p>}
+          {downloadError && <p className="text-xs text-red-300">{downloadError}</p>}
+        </div>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5">
+        <div
+          id="portfolio-section"
+          ref={portfolioSectionRef}
+          className={`rounded-lg border bg-zinc-900 p-5 transition-all duration-300 ${
+            isPortfolioHighlighted
+              ? "border-cyan-400 shadow-[0_0_0_3px_rgba(34,211,238,0.25)]"
+              : "border-zinc-800"
+          }`}
+        >
           <h2 className="text-lg font-medium text-zinc-100">Portfolio</h2>
           <p className="mt-2 text-sm text-zinc-400">
             Set addresses, check balance changes, and copy the parameter for the portfolio widget.
@@ -171,7 +327,15 @@ function HomePage({
           </button>
         </div>
 
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5">
+        <div
+          id="metagraph-section"
+          ref={metagraphSectionRef}
+          className={`rounded-lg border bg-zinc-900 p-5 transition-all duration-300 ${
+            isMetagraphHighlighted
+              ? "border-cyan-400 shadow-[0_0_0_3px_rgba(34,211,238,0.25)]"
+              : "border-zinc-800"
+          }`}
+        >
           <h2 className="text-lg font-medium text-zinc-100">Metagraph</h2>
           <p className="mt-2 text-sm text-zinc-400">
             Configure and generate the parameter for the metagraph widget in a future update.
@@ -183,30 +347,6 @@ function HomePage({
           >
             Metagraph (Coming Soon)
           </button>
-        </div>
-
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5 md:col-span-2">
-          <h2 className="text-lg font-medium text-zinc-100">2. Download Scriptable Loader</h2>
-          <p className="mt-2 text-sm text-zinc-400">
-            Use Authorize to set API values, then download TAO Radar Bootstrap{" "}
-            <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-200">web-main.js</code> with placeholders
-            injected.
-          </p>
-          <div className="mt-4 grid gap-3">
-            <button
-              type="button"
-              onClick={() => void onDownloadLoader()}
-              disabled={!canDownloadLoader}
-              className="rounded-md border border-cyan-700 px-4 py-2 text-sm font-semibold text-cyan-300 hover:border-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Download web-main.js
-            </button>
-            {!canDownloadLoader && (
-              <p className="text-xs text-zinc-500">Authorize first to enable loader download.</p>
-            )}
-            {downloadStatus && <p className="text-xs text-cyan-300">{downloadStatus}</p>}
-            {downloadError && <p className="text-xs text-red-300">{downloadError}</p>}
-          </div>
         </div>
 
         <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5 md:col-span-2">
