@@ -1,7 +1,19 @@
 @import "tailwindcss";
 
+html,
 body {
   margin: 0;
   min-width: 320px;
+  min-height: 100%;
+  background-color: #09090b;
+}
+
+body {
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  color-scheme: dark;
+}
+
+#root {
+  min-height: 100vh;
+  background-color: #09090b;
 }
