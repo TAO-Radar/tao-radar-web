@@ -39,7 +39,7 @@ jobs:
 
       - name: Build
         env:
-          VITE_BASE: /${{ github.event.repository.name }}/
+          VITE_BASE: /
         run: npm run build
 
       - name: Upload Pages artifact
