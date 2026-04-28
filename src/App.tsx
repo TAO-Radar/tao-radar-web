@@ -135,7 +135,7 @@ function HomePage({
             alt="TAO Radar logo"
             className="h-10 w-10 rounded-md border border-zinc-700 object-cover"
           />
-          <h1 className="text-3xl font-semibold text-emerald-400">TAO Radar Web</h1>
+          <h1 className="text-3xl font-semibold text-emerald-400">TAO Radar</h1>
         </div>
         <button
           type="button"
@@ -397,6 +397,10 @@ function App() {
     }
     setAuthState("authorized");
   };
+
+  useEffect(() => {
+    document.title = "TAO Radar";
+  }, []);
 
   useEffect(() => {
     const onHashChange = () => {
